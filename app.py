@@ -66,9 +66,13 @@ def handle_message(event):
 
     try:
         response = model.generate_content(prompt)
-        reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
+
+        # ดึงข้อความออกจาก candidates → content → parts
+        if response.candidates and response.candidates[0].content.parts:
+            reply_text = response.candidates[0].content.parts[0].text
+        else:
+            reply_text = "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
     except Exception as e:
-        # log error เพื่อ debug
         print("Gemini error:", e)
         reply_text = "เกิดข้อผิดพลาดในการประมวลผลระบบ QA กรุณาลองใหม่อีกครั้ง"
 
