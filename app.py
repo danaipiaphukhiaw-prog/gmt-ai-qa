@@ -28,7 +28,7 @@ handler = WebhookHandler(channel_secret)
 genai.configure(api_key=gemini_api_key)
 
 # ใช้ชื่อโมเดลที่ถูกต้อง
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("models/gemini-1.5-flash")
 
 @app.route("/")
 def home():
