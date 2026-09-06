@@ -27,7 +27,8 @@ configuration = Configuration(access_token=channel_access_token)
 handler = WebhookHandler(channel_secret)
 genai.configure(api_key=gemini_api_key)
 
-model = genai.GenerativeModel("gemini-1.5-flash-latest")
+# ใช้ชื่อโมเดลที่ถูกต้อง
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 @app.route("/")
 def home():
@@ -90,3 +91,4 @@ def handle_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
