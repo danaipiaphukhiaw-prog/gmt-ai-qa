@@ -9,7 +9,7 @@ from linebot.v3.messaging import (
     TextMessage
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
-import google.genai as genai
+import google.generativeai as genai
 import os
 
 app = Flask(__name__)
