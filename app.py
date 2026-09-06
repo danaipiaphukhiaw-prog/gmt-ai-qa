@@ -27,7 +27,7 @@ configuration = Configuration(access_token=channel_access_token)
 handler = WebhookHandler(channel_secret)
 genai.configure(api_key=gemini_api_key)
 
-# ใช้ชื่อโมเดลที่ถูกต้อง
+# ใช้ชื่อโมเดลที่ถูกต้อง (เวอร์ชันใหม่รองรับแบบนี้)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 @app.route("/")
@@ -47,6 +47,7 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
+    # สร้าง prompt จากข้อความที่ผู้ใช้ส่งมา
     prompt = f"""
 คุณคือ GMT QA Assistant
 
@@ -65,13 +66,13 @@ def handle_message(event):
 {event.message.text}
 """
 
-try:
-    response = model.generate_content(prompt)
-    reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
-except Exception as e:
-    print("Gemini error:", e)
-    reply_text = "เกิดข้อผิดพลาดในการประมวลผลระบบ QA กรุณาลองใหม่อีกครั้ง"
-
+    try:
+        response = model.generate_content(prompt)
+        # ไลบรารีเวอร์ชันใหม่สามารถใช้ response.text ได้เลย
+        reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
+    except Exception as e:
+        print("Gemini error:", e)
+        reply_text = "เกิดข้อผิดพลาดในการประมวลผลระบบ QA กรุณาลองใหม่อีกครั้ง"
 
     try:
         with ApiClient(configuration) as api_client:
