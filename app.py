@@ -28,7 +28,7 @@ handler = WebhookHandler(channel_secret)
 genai.configure(api_key=gemini_api_key)
 
 # ใช้ชื่อโมเดลที่ถูกต้อง
-model = genai.GenerativeModel("models/gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 @app.route("/")
 def home():
@@ -65,17 +65,13 @@ def handle_message(event):
 {event.message.text}
 """
 
-    try:
-        response = model.generate_content(prompt)
+try:
+    response = model.generate_content(prompt)
+    reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
+except Exception as e:
+    print("Gemini error:", e)
+    reply_text = "เกิดข้อผิดพลาดในการประมวลผลระบบ QA กรุณาลองใหม่อีกครั้ง"
 
-        # ดึงข้อความออกจาก candidates → content → parts
-        if response.candidates and response.candidates[0].content.parts:
-            reply_text = response.candidates[0].content.parts[0].text
-        else:
-            reply_text = "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
-    except Exception as e:
-        print("Gemini error:", e)
-        reply_text = "เกิดข้อผิดพลาดในการประมวลผลระบบ QA กรุณาลองใหม่อีกครั้ง"
 
     try:
         with ApiClient(configuration) as api_client:
