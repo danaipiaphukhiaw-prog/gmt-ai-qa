@@ -9,15 +9,23 @@ from linebot.v3.messaging import (
     TextMessage
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
-import google.generativeai as genai
+import google.genai as genai
 import os
 
 app = Flask(__name__)
 
-# ตั้งค่า Configuration
-configuration = Configuration(access_token=os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
-handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+# อ่านค่า Environment Variables
+channel_access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+channel_secret = os.environ.get("LINE_CHANNEL_SECRET")
+gemini_api_key = os.environ.get("GEMINI_API_KEY")
+
+if not channel_access_token or not channel_secret or not gemini_api_key:
+    raise ValueError("Missing environment variables")
+
+# ตั้งค่า LINE และ Gemini
+configuration = Configuration(access_token=channel_access_token)
+handler = WebhookHandler(channel_secret)
+genai.configure(api_key=gemini_api_key)
 
 model = genai.GenerativeModel("gemini-1.5-flash")
 
@@ -60,16 +68,21 @@ def handle_message(event):
         response = model.generate_content(prompt)
         reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
     except Exception as e:
+        # log error เพื่อ debug
+        print("Gemini error:", e)
         reply_text = "เกิดข้อผิดพลาดในการประมวลผลระบบ QA กรุณาลองใหม่อีกครั้ง"
 
-    with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=reply_text)]
+    try:
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[TextMessage(text=reply_text)]
+                )
             )
-        )
+    except Exception as e:
+        print("LINE reply error:", e)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
