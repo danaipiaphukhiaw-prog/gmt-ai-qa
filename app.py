@@ -25,7 +25,7 @@ if not channel_access_token or not channel_secret or not gemini_api_key:
 # ตั้งค่า LINE และ Gemini
 configuration = Configuration(access_token=channel_access_token)
 handler = WebhookHandler(channel_secret)
-genai.configure(api_key=gemini_api_key)
+genai.configure(api_key=gemini_api_key, client_options={"api_endpoint": "https://generativelanguage.googleapis.com/v1"})
 
 # ใช้โมเดลใหม่
 model = genai.GenerativeModel("gemini-1.5-flash")
