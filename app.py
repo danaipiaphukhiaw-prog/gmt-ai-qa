@@ -67,7 +67,8 @@ def handle_message(event):
     try:
         # ใช้ API ใหม่ (ไม่มี v1beta แล้ว)
         response = model.generate_content(prompt)
-        reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
+        reply_text = response.text if hasattr(response, "text") else response.candidates[0].content.parts[0].text
+
     except Exception as e:
         reply_text = f"เกิดข้อผิดพลาด: {e}"
 
