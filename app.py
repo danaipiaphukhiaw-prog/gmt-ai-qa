@@ -1,9 +1,10 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
-from linebot.models import MessageEvent, TextMessage, ImageMessage, TextSendMessage
+from linebot.models import MessageEvent, ImageMessage, TextSendMessage
 import google.generativeai as genai
 import os
-import requests
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 app = Flask(__name__)
 
@@ -14,6 +15,13 @@ handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 # Gemini setup
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-3.5-flash")
+
+# Google Sheets setup
+scope = ["https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
+client = gspread.authorize(creds)
+sheet = client.open("QA_Inspection_Results").sheet1
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -28,35 +36,11 @@ def callback():
 
     return 'OK'
 
-# ✅ กรณีข้อความ
-@handler.add(MessageEvent, message=TextMessage)
-def handle_text(event):
-    user_id = event.source.user_id
-    user_text = event.message.text
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text="กำลังประมวลผล...")
-    )
-
-    try:
-        response = model.generate_content(
-            user_text,
-            generation_config={"max_output_tokens": 512}
-        )
-        answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้"
-
-        line_bot_api.push_message(user_id, TextSendMessage(text=answer))
-
-    except Exception as e:
-        print("Gemini error:", e)
-        line_bot_api.push_message(user_id, TextSendMessage(text="เกิดข้อผิดพลาดในการประมวลผล"))
-
-# ✅ กรณีรูปภาพ
 @handler.add(MessageEvent, message=ImageMessage)
 def handle_image(event):
     user_id = event.source.user_id
 
+    # ตอบทันทีว่า "กำลังประมวลผล..."
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text="กำลังประมวลผล...")
@@ -77,8 +61,17 @@ def handle_image(event):
             )
 
         answer = response.text if response.text else "ไม่สามารถวิเคราะห์ภาพได้"
+
+        # ส่งผลลัพธ์กลับไปที่ LINE
         line_bot_api.push_message(user_id, TextSendMessage(text=answer))
+
+        # บันทึกผลลง Google Sheets
+        sheet.append_row([user_id, "Image Analysis", answer])
 
     except Exception as e:
         print("Gemini error:", e)
-        line_bot_api.push_message(user_id, TextSendMessage(text="เกิดข้อผิดพลาดในการวิเคราะห์ภาพ"))
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text="เกิดข้อผิดพลาดในการวิเคราะห์ภาพ")
+        )
+
