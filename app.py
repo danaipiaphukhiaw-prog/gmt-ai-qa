@@ -5,6 +5,7 @@ from linebot.models import (
     TextMessage,
     TextSendMessage
 )
+
 import google.generativeai as genai
 import os
 import threading
@@ -33,7 +34,6 @@ genai.configure(
 
 MODEL_PRO = "gemini-3.5-pro"
 MODEL_FLASH = "gemini-3.5-flash"
-
 
 # ======================================
 # HOME
@@ -95,38 +95,31 @@ def process_text(user_id, user_text):
         if lower_text.startswith("5why:"):
 
             query = f"""
-สร้าง 5 Why Analysis ภาษาไทย
+ตอบเฉพาะตามรูปแบบด้านล่าง
+
+Problem:
+Why1:
+Why2:
+Why3:
+Why4:
+Why5:
+RootCause:
+CorrectiveAction:
+PreventiveAction:
 
 ปัญหา:
 {user_text[5:].strip()}
 
-กฎ:
+ข้อกำหนด
 - ห้ามเกริ่นนำ
-- ห้ามอธิบายเพิ่มเติม
-- ตอบเฉพาะรูปแบบด้านล่าง
+- ห้ามเขียนบทสรุป
+- ห้ามใช้คำว่า
+  * เรียนทีมงาน
+  * ในฐานะ
+  * ขอเสนอ
+  * รายงาน
 - ตอบสั้น กระชับ
-
-Format:
-
-Problem:
-
-Why 1:
-
-Why 2:
-
-Why 3:
-
-Why 4:
-
-Why 5:
-
-Root Cause:
-
-Containment Action:
-
-Corrective Action:
-
-Preventive Action:
+- ไม่เกิน 15 บรรทัด
 """
 
             model = genai.GenerativeModel(MODEL_FLASH)
@@ -134,8 +127,8 @@ Preventive Action:
             response = model.generate_content(
                 query,
                 generation_config={
-                    "temperature": 0.2,
-                    "max_output_tokens": 256
+                    "temperature": 0.0,
+                    "max_output_tokens": 180
                 }
             )
 
@@ -145,11 +138,9 @@ Preventive Action:
         elif lower_text.startswith("car:"):
 
             query = f"""
-คุณคือ QA Manager
-
 สร้าง Corrective Action Report (CAR)
 
-หัวข้อ:
+ปัญหา:
 {user_text[4:].strip()}
 
 Format:
@@ -180,11 +171,9 @@ Target Date:
         elif lower_text.startswith("claim:"):
 
             query = f"""
-คุณคือ Supplier Quality Engineer
+Write Supplier Claim Email
 
-เขียน Supplier Claim ภาษาอังกฤษ
-
-ข้อมูล:
+Information:
 {user_text[6:].strip()}
 
 Format:
@@ -224,7 +213,6 @@ GMT Quality Center
 Translate the following text into professional QA/QC English.
 
 Text:
-
 {user_text[10:].strip()}
 """
 
@@ -254,7 +242,6 @@ Text:
 - Incoming Quality Control
 - In Process Quality Control
 - Final Quality Inspection
-- Customer Complaint Specialist
 
 ความเชี่ยวชาญ:
 - Defect Analysis
@@ -266,16 +253,8 @@ Text:
 - Supplier Claim
 - CAR
 - 8D Report
-- Quality Report Writing
-- Manufacturing Process Improvement
 
-กฎการตอบ:
-
-1. ตอบเป็นภาษาไทย
-2. ใช้ศัพท์ QA/QC และโรงงาน
-3. ไม่ตอบแบบ Chatbot ทั่วไป
-4. ตอบแบบ QA Engineer มืออาชีพ
-5. ตอบแบบเป็นหัวข้อ
+ตอบเป็นภาษาไทย
 
 Format:
 
@@ -295,7 +274,6 @@ Corrective Action:
 Preventive Action:
 
 คำถาม:
-
 {query_text}
 """
 
@@ -308,17 +286,26 @@ Preventive Action:
             )
 
         try:
-            answer = response.text[:3500]
+            answer = response.text[:1200]
         except Exception:
             answer = "ไม่สามารถสร้างคำตอบได้"
 
+        print("=" * 40)
         print("QUESTION:", user_text)
         print("ANSWER:", answer[:300])
+        print("=" * 40)
 
-        line_bot_api.push_message(
-            user_id,
-            TextSendMessage(text=answer)
-        )
+        chunks = [
+            answer[i:i + 1000]
+            for i in range(0, len(answer), 1000)
+        ]
+
+        for chunk in chunks:
+
+            line_bot_api.push_message(
+                user_id,
+                TextSendMessage(text=chunk)
+            )
 
     except Exception as e:
 
@@ -350,12 +337,15 @@ def handle_text(event):
 
 กำลังวิเคราะห์ข้อมูล...
 
-คำสั่งที่รองรับ
+ตัวอย่างคำสั่ง
 
-5why: ปัญหา
-car: ปัญหา
-claim: รายละเอียดเคลม
-translate: ข้อความ
+5why: Burr on side top panel
+
+car: Paint bulge
+
+claim: Vendor CRESTEC Qty 3 pcs Burr
+
+translate: พบรอยบุบบริเวณด้านข้าง Top Panel
 
 กรุณารอสักครู่..."""
         )
