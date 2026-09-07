@@ -28,11 +28,11 @@ def callback():
         body = request.get_data(as_text=True)
         handler.handle(body, signature)
     except Exception as e:
-        print("Error:", e)
-        return "Error", 200   # ✅ ตอบกลับ 200 แม้ error
-    return "OK", 200          # ✅ ตอบกลับ 200 เสมอ
+        print("Callback Error:", e)
+        return "Error", 200
+    return "OK", 200
 
-# ฟังก์ชันประมวลผลข้อความ
+# ฟังก์ชันประมวลผลข้อความ พร้อม fallback
 def process_text(user_id, user_text):
     try:
         model, query, max_tokens = get_model(user_text)
@@ -42,11 +42,29 @@ def process_text(user_id, user_text):
         )
         answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้"
         line_bot_api.push_message(user_id, TextSendMessage(text=answer))
+
     except Exception as e:
         print("Gemini error:", e)
-        line_bot_api.push_message(user_id, TextSendMessage(text="เกิดข้อผิดพลาดในการประมวลผล"))
+        if "429" in str(e):
+            try:
+                fallback_model = genai.GenerativeModel("gemini-3.5-flash")
+                response = fallback_model.generate_content(
+                    user_text.strip(),
+                    generation_config={"max_output_tokens": 256}
+                )
+                answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้ (flash)"
+                line_bot_api.push_message(user_id, TextSendMessage(
+                    text=f"pro quota หมด → ใช้ flash แทน:\n{answer}"
+                ))
+            except Exception as e2:
+                print("Fallback error:", e2)
+                line_bot_api.push_message(user_id, TextSendMessage(
+                    text="ระบบประมวลผลเกินโควตา กรุณาลองใหม่ภายหลัง"))
+        else:
+            line_bot_api.push_message(user_id, TextSendMessage(
+                text="เกิดข้อผิดพลาดในการประมวลผล"))
 
-# ฟังก์ชันประมวลผลรูปภาพ
+# ฟังก์ชันประมวลผลรูปภาพ พร้อม fallback
 def process_image(user_id, message_id, mode="flash"):
     try:
         message_content = line_bot_api.get_message_content(message_id)
@@ -69,9 +87,28 @@ def process_image(user_id, message_id, mode="flash"):
 
         answer = response.text if response.text else "ไม่สามารถวิเคราะห์ภาพได้"
         line_bot_api.push_message(user_id, TextSendMessage(text=answer))
+
     except Exception as e:
         print("Gemini error:", e)
-        line_bot_api.push_message(user_id, TextSendMessage(text="เกิดข้อผิดพลาดในการวิเคราะห์ภาพ"))
+        if "429" in str(e):
+            try:
+                fallback_model = genai.GenerativeModel("gemini-3.5-flash")
+                with open("temp.jpg", "rb") as img_file:
+                    response = fallback_model.generate_content(
+                        [{"image": img_file}],
+                        generation_config={"max_output_tokens": 256}
+                    )
+                answer = response.text if response.text else "ไม่สามารถวิเคราะห์ภาพได้ (flash)"
+                line_bot_api.push_message(user_id, TextSendMessage(
+                    text=f"pro quota หมด → ใช้ flash แทน:\n{answer}"
+                ))
+            except Exception as e2:
+                print("Fallback error:", e2)
+                line_bot_api.push_message(user_id, TextSendMessage(
+                    text="ระบบประมวลผลเกินโควตา กรุณาลองใหม่ภายหลัง"))
+        else:
+            line_bot_api.push_message(user_id, TextSendMessage(
+                text="เกิดข้อผิดพลาดในการวิเคราะห์ภาพ"))
 
 # ✅ Handler สำหรับข้อความ
 @handler.add(MessageEvent, message=TextMessage)
