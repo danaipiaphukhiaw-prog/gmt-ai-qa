@@ -1,106 +1,61 @@
 from flask import Flask, request, abort
-from linebot.v3 import WebhookHandler
-from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.messaging import (
-    Configuration,
-    ApiClient,
-    MessagingApi,
-    ReplyMessageRequest,
-    TextMessage
-)
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot import LineBotApi, WebhookHandler
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import google.generativeai as genai
 import os
 
 app = Flask(__name__)
 
-# อ่านค่า Environment Variables
-channel_access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
-channel_secret = os.environ.get("LINE_CHANNEL_SECRET")
-gemini_api_key = os.environ.get("GEMINI_API_KEY")
+# LINE setup
+line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-if not channel_access_token or not channel_secret or not gemini_api_key:
-    raise ValueError("Missing environment variables")
-
-# ตั้งค่า LINE และ Gemini
-configuration = Configuration(access_token=channel_access_token)
-handler = WebhookHandler(channel_secret)
-
-# บังคับให้ใช้ endpoint v1
-genai.configure(
-    api_key=gemini_api_key,
-    client_options={"api_endpoint": "https://generativelanguage.googleapis.com/v1"}
-)
-
-# ใช้โมเดลใหม่
+# Gemini setup
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-1.5-flash")
 
-@app.route("/")
-def home():
-    return "LINE AI QA Bot is running"
-
-@app.route("/callback", methods=["POST"])
+@app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers.get("X-Line-Signature", "")
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
 
     try:
         handler.handle(body, signature)
-    except InvalidSignatureError:
+    except Exception as e:
+        print("Error:", e)
         abort(400)
-    return "OK"
 
-@handler.add(MessageEvent, message=TextMessageContent)
+    return 'OK'
+
+@handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    # ตอบกลับทันทีด้วยข้อความ placeholder
-    placeholder = "กำลังประมวลผล..."
-    with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=placeholder)]
-            )
+    user_id = event.source.user_id
+    user_text = event.message.text
+
+    # ตอบทันทีว่า "กำลังประมวลผล..."
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text="กำลังประมวลผล...")
+    )
+
+    try:
+        # เรียก Gemini (จำกัด output ไม่ให้ยาวเกินไป)
+        response = model.generate_content(
+            user_text,
+            generation_config={"max_output_tokens": 512}
         )
 
-    # ประมวลผลด้วย Gemini แยกต่างหาก
-    prompt = f"""
-คุณคือ QA Assistant
-หน้าที่:
-- วิเคราะห์ Defect
-- Root Cause Analysis
-- 5 Why
-- Corrective Action
-- Preventive Action
-- Supplier Claim
+        answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้"
 
-ตอบเป็นภาษาไทย ใช้ศัพท์ QA/QC และโรงงาน
+        # ส่งผลลัพธ์จริงกลับไปด้วย push_message
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=answer)
+        )
 
-คำถาม:
-{event.message.text}
-"""
-
-    try:
-        response = model.generate_content(prompt)
-        if hasattr(response, "text") and response.text:
-            reply_text = response.text
-        elif response.candidates and response.candidates[0].content.parts:
-            reply_text = response.candidates[0].content.parts[0].text
-        else:
-            reply_text = "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
     except Exception as e:
-        reply_text = f"เกิดข้อผิดพลาด: {e}"
-
-    # ส่งผลลัพธ์จริงกลับไปด้วย push_message
-    try:
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            line_bot_api.push_message(
-                to=event.source.user_id,
-                messages=[TextMessage(text=reply_text)]
-            )
-    except Exception as e:
-        print("LINE push error:", e)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+        print("Gemini error:", e)
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text="เกิดข้อผิดพลาดในการประมวลผล")
+        )
