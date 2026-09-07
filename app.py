@@ -7,110 +7,158 @@ import threading
 
 app = Flask(__name__)
 
-# LINE setup
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# Gemini setup
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# ฟังก์ชันเลือกโมเดลตามโหมด
+
 def get_model(user_text):
     if user_text.lower().startswith("pro:"):
         return genai.GenerativeModel("gemini-3.5-pro"), user_text[4:].strip(), 512
     else:
         return genai.GenerativeModel("gemini-3.5-flash"), user_text.strip(), 256
 
-@app.route("/callback", methods=['POST'])
+
+@app.route("/")
+def home():
+    return "GMT AI QA is running"
+
+
+@app.route("/callback", methods=["POST"])
 def callback():
-    try:
-        signature = request.headers.get('X-Line-Signature', '')
-        body = request.get_data(as_text=True)
-        handler.handle(body, signature)
-    except Exception as e:
-        print("Callback Error:", e)
-        return "Error", 200
+    signature = request.headers.get("X-Line-Signature", "")
+    body = request.get_data(as_text=True)
+    handler.handle(body, signature)
     return "OK", 200
 
-# ฟังก์ชันประมวลผลข้อความ พร้อม fallback
+
 def process_text(user_id, user_text):
     try:
-        model, query, max_tokens = get_model(user_text)
-        response = model.generate_content(
-            query,
-            generation_config={"max_output_tokens": max_tokens}
-        )
-        answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้"
-        line_bot_api.push_message(user_id, TextSendMessage(text=answer))
+        lower_text = user_text.lower()
 
-    except Exception as e:
-        print("Gemini error:", e)
-        if "429" in str(e):
-            try:
-                fallback_model = genai.GenerativeModel("gemini-3.5-flash")
-                response = fallback_model.generate_content(
-                    user_text.strip(),
-                    generation_config={"max_output_tokens": 256}
-                )
-                answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้ (flash)"
-                line_bot_api.push_message(user_id, TextSendMessage(
-                    text=f"pro quota หมด → ใช้ flash แทน:\n{answer}"
-                ))
-            except Exception as e2:
-                print("Fallback error:", e2)
-                line_bot_api.push_message(user_id, TextSendMessage(
-                    text="ระบบประมวลผลเกินโควตา กรุณาลองใหม่ภายหลัง"))
-        else:
-            line_bot_api.push_message(user_id, TextSendMessage(
-                text="เกิดข้อผิดพลาดในการประมวลผล"))
+        if lower_text.startswith("5why:"):
+            query = f"""
+คุณคือ Senior QA Engineer
 
-# ฟังก์ชันประมวลผลรูปภาพ พร้อม fallback
-def process_image(user_id, message_id, mode="flash"):
-    try:
-        message_content = line_bot_api.get_message_content(message_id)
-        with open("temp.jpg", "wb") as f:
-            for chunk in message_content.iter_content():
-                f.write(chunk)
+ทำ 5 Why Analysis ให้เป็นภาษาไทย
 
-        if mode == "pro":
-            model = genai.GenerativeModel("gemini-3.5-pro")
-            max_tokens = 512
-        else:
+ปัญหา:
+{user_text[5:].strip()}
+
+รูปแบบ:
+Problem:
+Why 1:
+Why 2:
+Why 3:
+Why 4:
+Why 5:
+Root Cause:
+Containment Action:
+Corrective Action:
+Preventive Action:
+"""
             model = genai.GenerativeModel("gemini-3.5-flash")
-            max_tokens = 256
+            response = model.generate_content(query)
 
-        with open("temp.jpg", "rb") as img_file:
+        elif lower_text.startswith("car:"):
+            query = f"""
+คุณคือ QA Manager
+
+ช่วยเขียน Corrective Action Report (CAR)
+
+หัวข้อ:
+{user_text[4:].strip()}
+
+รูปแบบ:
+Problem Description
+Containment Action
+Root Cause
+Corrective Action
+Preventive Action
+Verification Method
+Responsible Person
+Target Date
+"""
+            model = genai.GenerativeModel("gemini-3.5-flash")
+            response = model.generate_content(query)
+
+        elif lower_text.startswith("claim:"):
+            query = f"""
+คุณคือ Supplier Quality Engineer
+
+ช่วยเขียน Supplier Claim ภาษาอังกฤษ
+
+ข้อมูล:
+{user_text[6:].strip()}
+
+รูปแบบ:
+Subject:
+Part Number:
+Model:
+Qty:
+Problem:
+Request:
+Please investigate the root cause and provide corrective action.
+
+Best Regards
+GMT Quality Center
+"""
+            model = genai.GenerativeModel("gemini-3.5-flash")
+            response = model.generate_content(query)
+
+        else:
+            model, query_text, max_tokens = get_model(user_text)
+
+            query = f"""
+คุณคือ GMT QA/QC Engineer Assistant
+
+ความเชี่ยวชาญ:
+- Incoming Inspection
+- In Process Quality Control
+- Final Inspection
+- Supplier Quality Management
+- Root Cause Analysis
+- Defect Analysis
+- 5 Why
+- CAR
+- Corrective Action
+- Preventive Action
+
+ตอบเป็นภาษาไทย
+ใช้ศัพท์ QA/QC โรงงาน
+
+รูปแบบ:
+Defect:
+Possible Cause:
+Containment Action:
+Corrective Action:
+Preventive Action:
+
+คำถาม:
+{query_text}
+"""
+
             response = model.generate_content(
-                [{"image": img_file}],
+                query,
                 generation_config={"max_output_tokens": max_tokens}
             )
 
-        answer = response.text if response.text else "ไม่สามารถวิเคราะห์ภาพได้"
-        line_bot_api.push_message(user_id, TextSendMessage(text=answer))
+        answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้"
+
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text=answer)
+        )
 
     except Exception as e:
         print("Gemini error:", e)
-        if "429" in str(e):
-            try:
-                fallback_model = genai.GenerativeModel("gemini-3.5-flash")
-                with open("temp.jpg", "rb") as img_file:
-                    response = fallback_model.generate_content(
-                        [{"image": img_file}],
-                        generation_config={"max_output_tokens": 256}
-                    )
-                answer = response.text if response.text else "ไม่สามารถวิเคราะห์ภาพได้ (flash)"
-                line_bot_api.push_message(user_id, TextSendMessage(
-                    text=f"pro quota หมด → ใช้ flash แทน:\n{answer}"
-                ))
-            except Exception as e2:
-                print("Fallback error:", e2)
-                line_bot_api.push_message(user_id, TextSendMessage(
-                    text="ระบบประมวลผลเกินโควตา กรุณาลองใหม่ภายหลัง"))
-        else:
-            line_bot_api.push_message(user_id, TextSendMessage(
-                text="เกิดข้อผิดพลาดในการวิเคราะห์ภาพ"))
+        line_bot_api.push_message(
+            user_id,
+            TextSendMessage(text="เกิดข้อผิดพลาดในการประมวลผล")
+        )
 
-# ✅ Handler สำหรับข้อความ
+
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text(event):
     user_id = event.source.user_id
@@ -121,20 +169,11 @@ def handle_text(event):
         TextSendMessage(text="โอเคครับ รอสักครู่...")
     )
 
-    threading.Thread(target=process_text, args=(user_id, user_text)).start()
+    threading.Thread(
+        target=process_text,
+        args=(user_id, user_text)
+    ).start()
 
-# ✅ Handler สำหรับรูปภาพ
-@handler.add(MessageEvent, message=ImageMessage)
-def handle_image(event):
-    user_id = event.source.user_id
 
-    # ค่าเริ่มต้น flash, ถ้าอยากใช้ pro → ส่งรูปพร้อมข้อความว่า "pro"
-    mode = "pro" if "pro" in event.message.contentProvider.type.lower() else "flash"
-
-    line_bot_api.reply_message(
-        event.reply_token,
-        TextSendMessage(text=f"โอเคครับ กำลังวิเคราะห์รูป ({mode})...")
-    )
-
-    threading.Thread(target=process_image, args=(user_id, event.message.id, mode)).start()
-
+if __name__ == "__main__":
+    app.run()
