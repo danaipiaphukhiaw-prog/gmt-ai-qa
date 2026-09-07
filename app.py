@@ -27,10 +27,8 @@ configuration = Configuration(access_token=channel_access_token)
 handler = WebhookHandler(channel_secret)
 genai.configure(api_key=gemini_api_key)
 
-# ใช้โมเดลใหม่ (ไม่ต้อง v1beta แล้ว)
+# ใช้โมเดลใหม่
 model = genai.GenerativeModel("gemini-1.5-flash")
-response = model.generate_content(prompt)
-
 
 @app.route("/")
 def home():
@@ -67,9 +65,16 @@ def handle_message(event):
 """
 
     try:
-        # ใช้ API ใหม่ (ไม่มี v1beta แล้ว)
+        # ใช้ API ใหม่
         response = model.generate_content(prompt)
-        reply_text = response.text if hasattr(response, "text") else response.candidates[0].content.parts[0].text
+
+        # ดึงข้อความจาก response อย่างปลอดภัย
+        if hasattr(response, "text") and response.text:
+            reply_text = response.text
+        elif response.candidates and response.candidates[0].content.parts:
+            reply_text = response.candidates[0].content.parts[0].text
+        else:
+            reply_text = "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
 
     except Exception as e:
         reply_text = f"เกิดข้อผิดพลาด: {e}"
@@ -89,3 +94,4 @@ def handle_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
