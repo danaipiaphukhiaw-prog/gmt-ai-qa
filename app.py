@@ -1,3 +1,55 @@
+from flask import Flask, request, abort
+from linebot.v3 import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.messaging import (
+    Configuration,
+    ApiClient,
+    MessagingApi,
+    ReplyMessageRequest,
+    TextMessage
+)
+from linebot.v3.webhooks import MessageEvent, TextMessageContent
+import google.generativeai as genai
+import os
+
+app = Flask(__name__)
+
+# อ่านค่า Environment Variables
+channel_access_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+channel_secret = os.environ.get("LINE_CHANNEL_SECRET")
+gemini_api_key = os.environ.get("GEMINI_API_KEY")
+
+if not channel_access_token or not channel_secret or not gemini_api_key:
+    raise ValueError("Missing environment variables")
+
+# ตั้งค่า LINE และ Gemini
+configuration = Configuration(access_token=channel_access_token)
+handler = WebhookHandler(channel_secret)
+
+# บังคับให้ใช้ endpoint v1
+genai.configure(
+    api_key=gemini_api_key,
+    client_options={"api_endpoint": "https://generativelanguage.googleapis.com/v1"}
+)
+
+# ใช้โมเดลใหม่
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+@app.route("/")
+def home():
+    return "LINE AI QA Bot is running"
+
+@app.route("/callback", methods=["POST"])
+def callback():
+    signature = request.headers.get("X-Line-Signature", "")
+    body = request.get_data(as_text=True)
+
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK"
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     # ตอบกลับทันทีด้วยข้อความ placeholder
@@ -49,3 +101,6 @@ def handle_message(event):
             )
     except Exception as e:
         print("LINE push error:", e)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
