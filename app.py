@@ -91,7 +91,7 @@ def handle_text(event):
 def handle_image(event):
     user_id = event.source.user_id
 
-    # ถ้าอยากใช้ pro mode → ส่งรูปพร้อมข้อความว่า "pro"
+    # ค่าเริ่มต้น flash, ถ้าอยากใช้ pro → ส่งรูปพร้อมข้อความว่า "pro"
     mode = "pro" if "pro" in event.message.contentProvider.type.lower() else "flash"
 
     line_bot_api.reply_message(
@@ -100,5 +100,4 @@ def handle_image(event):
     )
 
     threading.Thread(target=process_image, args=(user_id, event.message.id, mode)).start()
-
 
