@@ -29,6 +29,8 @@ genai.configure(api_key=gemini_api_key)
 
 # ใช้โมเดลใหม่ (ไม่ต้อง v1beta แล้ว)
 model = genai.GenerativeModel("gemini-1.5-flash")
+response = model.generate_content(prompt)
+
 
 @app.route("/")
 def home():
