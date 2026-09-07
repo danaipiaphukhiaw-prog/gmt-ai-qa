@@ -12,31 +12,15 @@ import threading
 app = Flask(__name__)
 
 # ======================================
-# ENVIRONMENT VARIABLES
-# ======================================
-
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv(
-    "LINE_CHANNEL_ACCESS_TOKEN"
-)
-
-LINE_CHANNEL_SECRET = os.getenv(
-    "LINE_CHANNEL_SECRET"
-)
-
-GEMINI_API_KEY = os.getenv(
-    "GEMINI_API_KEY"
-)
-
-# ======================================
 # LINE
 # ======================================
 
 line_bot_api = LineBotApi(
-    LINE_CHANNEL_ACCESS_TOKEN
+    os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 )
 
 handler = WebhookHandler(
-    LINE_CHANNEL_SECRET
+    os.getenv("LINE_CHANNEL_SECRET")
 )
 
 # ======================================
@@ -44,11 +28,12 @@ handler = WebhookHandler(
 # ======================================
 
 genai.configure(
-    api_key=GEMINI_API_KEY
+    api_key=os.getenv("GEMINI_API_KEY")
 )
 
 MODEL_PRO = "gemini-3.5-pro"
 MODEL_FLASH = "gemini-3.5-flash"
+
 
 # ======================================
 # HOME
@@ -57,6 +42,7 @@ MODEL_FLASH = "gemini-3.5-flash"
 @app.route("/")
 def home():
     return "GMT AI QA is running"
+
 
 # ======================================
 # WEBHOOK
@@ -71,6 +57,7 @@ def callback():
     handler.handle(body, signature)
 
     return "OK"
+
 
 # ======================================
 # MODEL SELECTOR
@@ -91,8 +78,9 @@ def get_model(user_text):
         256
     )
 
+
 # ======================================
-# GEMINI PROCESS
+# PROCESS TEXT
 # ======================================
 
 def process_text(user_id, user_text):
@@ -107,37 +95,47 @@ def process_text(user_id, user_text):
         if lower_text.startswith("5why:"):
 
             query = f"""
-คุณคือ Senior QA Engineer
-
-ทำ 5 Why Analysis
+สร้าง 5 Why Analysis ภาษาไทย
 
 ปัญหา:
-
 {user_text[5:].strip()}
+
+กฎ:
+- ห้ามเกริ่นนำ
+- ห้ามอธิบายเพิ่มเติม
+- ตอบเฉพาะรูปแบบด้านล่าง
+- ตอบสั้น กระชับ
 
 Format:
 
 Problem:
+
 Why 1:
+
 Why 2:
+
 Why 3:
+
 Why 4:
+
 Why 5:
+
 Root Cause:
+
 Containment Action:
+
 Corrective Action:
+
 Preventive Action:
 """
 
-            model = genai.GenerativeModel(
-                MODEL_FLASH
-            )
+            model = genai.GenerativeModel(MODEL_FLASH)
 
             response = model.generate_content(
                 query,
                 generation_config={
                     "temperature": 0.2,
-                    "max_output_tokens": 512
+                    "max_output_tokens": 256
                 }
             )
 
@@ -152,7 +150,6 @@ Preventive Action:
 สร้าง Corrective Action Report (CAR)
 
 หัวข้อ:
-
 {user_text[4:].strip()}
 
 Format:
@@ -167,9 +164,7 @@ Responsible Person:
 Target Date:
 """
 
-            model = genai.GenerativeModel(
-                MODEL_FLASH
-            )
+            model = genai.GenerativeModel(MODEL_FLASH)
 
             response = model.generate_content(
                 query,
@@ -180,7 +175,7 @@ Target Date:
             )
 
         # ==================================
-        # SUPPLIER CLAIM
+        # CLAIM
         # ==================================
         elif lower_text.startswith("claim:"):
 
@@ -190,7 +185,6 @@ Target Date:
 เขียน Supplier Claim ภาษาอังกฤษ
 
 ข้อมูล:
-
 {user_text[6:].strip()}
 
 Format:
@@ -211,9 +205,7 @@ Best Regards
 GMT Quality Center
 """
 
-            model = genai.GenerativeModel(
-                MODEL_FLASH
-            )
+            model = genai.GenerativeModel(MODEL_FLASH)
 
             response = model.generate_content(
                 query,
@@ -236,9 +228,7 @@ Text:
 {user_text[10:].strip()}
 """
 
-            model = genai.GenerativeModel(
-                MODEL_FLASH
-            )
+            model = genai.GenerativeModel(MODEL_FLASH)
 
             response = model.generate_content(
                 query,
@@ -290,7 +280,6 @@ Text:
 Format:
 
 Defect Description:
-(อธิบายปัญหา)
 
 Possible Cause:
 - Cause 1
@@ -298,16 +287,12 @@ Possible Cause:
 - Cause 3
 
 Risk Assessment:
-(ผลกระทบ)
 
 Containment Action:
-(การแก้ไขเฉพาะหน้า)
 
 Corrective Action:
-(การแก้ไขถาวร)
 
 Preventive Action:
-(การป้องกันไม่ให้เกิดซ้ำ)
 
 คำถาม:
 
@@ -323,7 +308,7 @@ Preventive Action:
             )
 
         try:
-            answer = response.text
+            answer = response.text[:3500]
         except Exception:
             answer = "ไม่สามารถสร้างคำตอบได้"
 
@@ -345,6 +330,7 @@ Preventive Action:
                 text="ระบบประมวลผลขัดข้อง กรุณาลองใหม่อีกครั้ง"
             )
         )
+
 
 # ======================================
 # LINE TEXT EVENT
@@ -380,12 +366,10 @@ translate: ข้อความ
         args=(user_id, user_text)
     ).start()
 
+
 # ======================================
 # START
 # ======================================
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=10000
-    )
+    app.run()
