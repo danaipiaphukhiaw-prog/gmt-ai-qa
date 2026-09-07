@@ -28,7 +28,7 @@ handler = WebhookHandler(channel_secret)
 genai.configure(api_key=gemini_api_key)
 
 # ใช้ gemini-pro (รุ่นที่ Render รองรับ ไม่ต้องแก้ runtime)
-model = genai.GenerativeModel("gemini-pro")
+model = genai.GenerativeModel("gemini-1.5-pro")
 
 @app.route("/")
 def home():
