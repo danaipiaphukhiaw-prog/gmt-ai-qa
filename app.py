@@ -1,4 +1,4 @@
-from flask import Flask, request, abort
+from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import MessageEvent, TextMessage, ImageMessage, TextSendMessage
 import google.generativeai as genai
@@ -20,6 +20,17 @@ def get_model(user_text):
         return genai.GenerativeModel("gemini-3.5-pro"), user_text[4:].strip(), 512
     else:
         return genai.GenerativeModel("gemini-3.5-flash"), user_text.strip(), 256
+
+@app.route("/callback", methods=['POST'])
+def callback():
+    try:
+        signature = request.headers.get('X-Line-Signature', '')
+        body = request.get_data(as_text=True)
+        handler.handle(body, signature)
+    except Exception as e:
+        print("Error:", e)
+        return "Error", 200   # ✅ ตอบกลับ 200 แม้ error
+    return "OK", 200          # ✅ ตอบกลับ 200 เสมอ
 
 # ฟังก์ชันประมวลผลข้อความ
 def process_text(user_id, user_text):
@@ -43,7 +54,6 @@ def process_image(user_id, message_id, mode="flash"):
             for chunk in message_content.iter_content():
                 f.write(chunk)
 
-        # เลือกโมเดลตามโหมด
         if mode == "pro":
             model = genai.GenerativeModel("gemini-3.5-pro")
             max_tokens = 512
@@ -90,4 +100,5 @@ def handle_image(event):
     )
 
     threading.Thread(target=process_image, args=(user_id, event.message.id, mode)).start()
+
 
