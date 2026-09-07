@@ -68,6 +68,7 @@ def handle_message(event):
 
     try:
         response = model.generate_content(prompt)
+        # ไลบรารีใหม่สามารถใช้ response.text ได้เลย
         reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
     except Exception as e:
         print("Gemini error:", e)
@@ -87,4 +88,3 @@ def handle_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
