@@ -1,20 +1,15 @@
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
-from linebot.models import (
-    MessageEvent,
-    TextMessage,
-    TextSendMessage
-)
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 import google.generativeai as genai
 import os
-import threading
 
 app = Flask(__name__)
 
-# ======================================
+# ==========================
 # LINE
-# ======================================
+# ==========================
 
 line_bot_api = LineBotApi(
     os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
@@ -24,29 +19,27 @@ handler = WebhookHandler(
     os.getenv("LINE_CHANNEL_SECRET")
 )
 
-# ======================================
+# ==========================
 # GEMINI
-# ======================================
+# ==========================
 
 genai.configure(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-MODEL_PRO = "gemini-3.5-pro"
-MODEL_FLASH = "gemini-3.5-flash"
+MODEL = "gemini-3.5-flash"
 
-# ======================================
+# ==========================
 # HOME
-# ======================================
+# ==========================
 
 @app.route("/")
 def home():
-    return "GMT AI QA V3"
+    return "GMT AI QA V5"
 
-
-# ======================================
+# ==========================
 # WEBHOOK
-# ======================================
+# ==========================
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -58,44 +51,57 @@ def callback():
 
     return "OK"
 
+# ==========================
+# LINE EVENT
+# ==========================
 
-# ======================================
-# MODEL SELECTOR
-# ======================================
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
 
-def get_model(user_text):
+    user_text = event.message.text
+    lower_text = user_text.lower()
 
-    if user_text.lower().startswith("pro:"):
-        return (
-            genai.GenerativeModel(MODEL_PRO),
-            user_text[4:].strip(),
-            512
+    # HELP
+
+    if lower_text == "help":
+
+        answer = """
+🤖 GMT AI QA Assistant
+
+คำสั่ง
+
+5why: ปัญหา
+
+car: ปัญหา
+
+claim: รายละเอียดเคลม
+
+translate: ข้อความ
+
+ตัวอย่าง
+
+5why: Burr on side top panel
+
+car: Paint bulge
+
+claim: Vendor CRESTEC Qty 3 pcs Burr
+
+translate: พบรอยบุบบริเวณด้านข้าง Top Panel
+"""
+
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=answer)
         )
 
-    return (
-        genai.GenerativeModel(MODEL_FLASH),
-        user_text.strip(),
-        256
-    )
+        return
 
+    # 5WHY
 
-# ======================================
-# PROCESS TEXT
-# ======================================
+    if lower_text.startswith("5why:"):
 
-def process_text(user_id, user_text):
-
-    try:
-
-        lower_text = user_text.lower()
-
-        # ==================================
-        # 5 WHY
-        # ==================================
-        if lower_text.startswith("5why:"):
-
-            query = f"""
-ตอบเฉพาะตามรูปแบบด้านล่าง
+        prompt = f"""
+ตอบเฉพาะ Format นี้
 
 Problem:
 Why1:
@@ -107,40 +113,18 @@ RootCause:
 CorrectiveAction:
 PreventiveAction:
 
-ปัญหา:
+Problem:
 {user_text[5:].strip()}
-
-ข้อกำหนด
-- ห้ามเกริ่นนำ
-- ห้ามเขียนบทสรุป
-- ห้ามใช้คำว่า
-  ยินดีต้อนรับ
-  สวัสดี
-  ในฐานะ
-  ขอเสนอ
-  รายงาน
-- ตอบสั้น กระชับ
 """
 
-            model = genai.GenerativeModel(MODEL_FLASH)
+    # CAR
 
-            response = model.generate_content(
-                query,
-                generation_config={
-                    "temperature": 0.0,
-                    "max_output_tokens": 180
-                }
-            )
+    elif lower_text.startswith("car:"):
 
-        # ==================================
-        # CAR
-        # ==================================
-        elif lower_text.startswith("car:"):
+        prompt = f"""
+สร้าง Corrective Action Report
 
-            query = f"""
-สร้าง Corrective Action Report (CAR)
-
-ปัญหา:
+Problem:
 {user_text[4:].strip()}
 
 Format:
@@ -155,22 +139,11 @@ Responsible Person:
 Target Date:
 """
 
-            model = genai.GenerativeModel(MODEL_FLASH)
+    # CLAIM
 
-            response = model.generate_content(
-                query,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": 300
-                }
-            )
+    elif lower_text.startswith("claim:"):
 
-        # ==================================
-        # CLAIM
-        # ==================================
-        elif lower_text.startswith("claim:"):
-
-            query = f"""
+        prompt = f"""
 Write Supplier Claim Email
 
 Information:
@@ -194,70 +167,34 @@ Best Regards
 GMT Quality Center
 """
 
-            model = genai.GenerativeModel(MODEL_FLASH)
+    # TRANSLATE
 
-            response = model.generate_content(
-                query,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": 300
-                }
-            )
+    elif lower_text.startswith("translate:"):
 
-        # ==================================
-        # TRANSLATE
-        # ==================================
-        elif lower_text.startswith("translate:"):
-
-            query = f"""
+        prompt = f"""
 Translate the following text into professional QA/QC English.
 
 Text:
 {user_text[10:].strip()}
 """
 
-            model = genai.GenerativeModel(MODEL_FLASH)
+    # QA ANALYSIS
 
-            response = model.generate_content(
-                query,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": 200
-                }
-            )
+    else:
 
-        # ==================================
-        # NORMAL QA
-        # ==================================
-        else:
-
-            model, query_text, max_tokens = get_model(user_text)
-
-            query = f"""
+        prompt = f"""
 คุณคือ GMT Quality Center QA Analysis Engine
 
-หน้าที่:
-- Defect Analysis
-- Root Cause Analysis
-- Supplier Quality
-- Process Quality
-- Corrective Action
-- Preventive Action
+ห้ามทักทาย
+ห้ามแนะนำตัว
+ห้ามใช้คำว่า
+- ยินดีต้อนรับ
+- สวัสดี
+- ผมคือ
+- ผู้ช่วย
+- AI Assistant
 
-ข้อกำหนด:
-- ห้ามทักทาย
-- ห้ามแนะนำตัว
-- ห้ามใช้คำว่า ยินดีต้อนรับ
-- ห้ามใช้คำว่า สวัสดี
-- ห้ามใช้คำว่า ผมคือ
-- ห้ามใช้คำว่า ฉันคือ
-- ห้ามใช้คำว่า ผู้ช่วย
-- ห้ามใช้คำว่า AI Assistant
-- ห้ามใช้คำว่า ในฐานะ
-- ห้ามใช้คำว่า ขอเสนอ
-- ห้ามใช้คำว่า เรียนทีมงาน
-
-ตอบเป็นภาษาไทยเท่านั้น
+ตอบเป็นภาษาไทย
 
 Format:
 
@@ -277,113 +214,79 @@ Corrective Action:
 Preventive Action:
 
 ข้อมูล:
-{query_text}
+{user_text}
 """
 
-            response = model.generate_content(
-                query,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": max_tokens
-                }
-            )
+    try:
 
-        try:
+        model = genai.GenerativeModel(MODEL)
 
-            answer = response.text[:1200]
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 800
+            }
+        )
 
-            bad_words = [
-                "ยินดีต้อนรับครับ",
-                "ยินดีต้อนรับ",
-                "สวัสดีครับ",
-                "สวัสดี",
-                "ผมคือ",
-                "ฉันคือ",
-                "ผู้ช่วย",
-                "AI Assistant",
-                "ในฐานะ",
-                "ขอเสนอ",
-                "เรียนทีมงาน"
-            ]
+        answer = response.text[:1200]
 
-            for word in bad_words:
-                answer = answer.replace(word, "")
-
-        except Exception:
-
-            answer = "ไม่สามารถสร้างคำตอบได้"
-
-        print("=" * 40)
-        print("QUESTION:", user_text)
-        print("ANSWER:")
-        print(answer)
-        print("=" * 40)
-
-        chunks = [
-            answer[i:i + 1000]
-            for i in range(0, len(answer), 1000)
+        bad_words = [
+            "ยินดีต้อนรับครับ",
+            "ยินดีต้อนรับ",
+            "สวัสดีครับ",
+            "สวัสดี",
+            "ผมคือ",
+            "ฉันคือ",
+            "ผู้ช่วย",
+            "AI Assistant",
+            "ในฐานะ",
+            "ขอเสนอ",
+            "เรียนทีมงาน"
         ]
 
-        for chunk in chunks:
-
-            line_bot_api.push_message(
-                user_id,
-                TextSendMessage(text=chunk)
-            )
+        for word in bad_words:
+            answer = answer.replace(word, "")
 
     except Exception as e:
 
-        print("Gemini Error:", e)
+        error_text = str(e)
 
-        line_bot_api.push_message(
-            user_id,
-            TextSendMessage(
-                text=f"ERROR: {str(e)}"
-            )
-        )
+        if "429" in error_text:
 
+            answer = """
+⚠️ AI QA ใช้งานถึงขีดจำกัดชั่วคราว
 
-# ======================================
-# LINE TEXT EVENT
-# ======================================
+Gemini API เกินโควต้าฟรี
 
-@handler.add(MessageEvent, message=TextMessage)
-def handle_text(event):
+กรุณารอประมาณ 1 นาที
+แล้วลองใหม่อีกครั้ง
+"""
 
-    user_id = event.source.user_id
-    user_text = event.message.text
+        else:
+
+            answer = f"""
+⚠️ เกิดข้อผิดพลาด
+
+{error_text[:300]}
+"""
 
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(
-            text=
-"""🤖 GMT AI QA Assistant
-
-กำลังวิเคราะห์ข้อมูล...
-
-ตัวอย่างคำสั่ง:
-
-5why: Burr on side top panel
-
-car: Paint bulge
-
-claim: Vendor CRESTEC Qty 3 pcs Burr
-
-translate: พบรอยบุบบริเวณด้านข้าง Top Panel
-
-กรุณารอสักครู่..."""
-        )
+        TextSendMessage(text=answer)
     )
 
-    threading.Thread(
-        target=process_text,
-        args=(user_id, user_text)
-    ).start()
-
-
-# ======================================
+# ==========================
 # START
-# ======================================
+# ==========================
 
 if __name__ == "__main__":
-    app.run()
+
+    port = int(
+        os.environ.get("PORT", 10000)
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
