@@ -49,4 +49,3 @@ def handle_message(event):
             )
     except Exception as e:
         print("LINE push error:", e)
-
