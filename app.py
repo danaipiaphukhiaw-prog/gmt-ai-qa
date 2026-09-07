@@ -41,7 +41,7 @@ MODEL_FLASH = "gemini-3.5-flash"
 
 @app.route("/")
 def home():
-    return "GMT AI QA is running"
+    return "GMT AI QA V3"
 
 
 # ======================================
@@ -114,12 +114,12 @@ PreventiveAction:
 - ห้ามเกริ่นนำ
 - ห้ามเขียนบทสรุป
 - ห้ามใช้คำว่า
-  * เรียนทีมงาน
-  * ในฐานะ
-  * ขอเสนอ
-  * รายงาน
+  ยินดีต้อนรับ
+  สวัสดี
+  ในฐานะ
+  ขอเสนอ
+  รายงาน
 - ตอบสั้น กระชับ
-- ไม่เกิน 15 บรรทัด
 """
 
             model = genai.GenerativeModel(MODEL_FLASH)
@@ -160,8 +160,8 @@ Target Date:
             response = model.generate_content(
                 query,
                 generation_config={
-                    "temperature": 0.2,
-                    "max_output_tokens": 512
+                    "temperature": 0.1,
+                    "max_output_tokens": 300
                 }
             )
 
@@ -199,8 +199,8 @@ GMT Quality Center
             response = model.generate_content(
                 query,
                 generation_config={
-                    "temperature": 0.2,
-                    "max_output_tokens": 512
+                    "temperature": 0.1,
+                    "max_output_tokens": 300
                 }
             )
 
@@ -221,8 +221,8 @@ Text:
             response = model.generate_content(
                 query,
                 generation_config={
-                    "temperature": 0.2,
-                    "max_output_tokens": 256
+                    "temperature": 0.1,
+                    "max_output_tokens": 200
                 }
             )
 
@@ -234,36 +234,39 @@ Text:
             model, query_text, max_tokens = get_model(user_text)
 
             query = f"""
-คุณคือ GMT Quality Center AI Assistant
+คุณคือ GMT Quality Center QA Analysis Engine
 
-บทบาท:
-- Senior QA Engineer
-- Supplier Quality Engineer
-- Incoming Quality Control
-- In Process Quality Control
-- Final Quality Inspection
-
-ความเชี่ยวชาญ:
+หน้าที่:
 - Defect Analysis
 - Root Cause Analysis
-- 5 Why
-- Fishbone Analysis
+- Supplier Quality
+- Process Quality
 - Corrective Action
 - Preventive Action
-- Supplier Claim
-- CAR
-- 8D Report
 
-ตอบเป็นภาษาไทย
+ข้อกำหนด:
+- ห้ามทักทาย
+- ห้ามแนะนำตัว
+- ห้ามใช้คำว่า ยินดีต้อนรับ
+- ห้ามใช้คำว่า สวัสดี
+- ห้ามใช้คำว่า ผมคือ
+- ห้ามใช้คำว่า ฉันคือ
+- ห้ามใช้คำว่า ผู้ช่วย
+- ห้ามใช้คำว่า AI Assistant
+- ห้ามใช้คำว่า ในฐานะ
+- ห้ามใช้คำว่า ขอเสนอ
+- ห้ามใช้คำว่า เรียนทีมงาน
+
+ตอบเป็นภาษาไทยเท่านั้น
 
 Format:
 
 Defect Description:
 
 Possible Cause:
-- Cause 1
-- Cause 2
-- Cause 3
+1.
+2.
+3.
 
 Risk Assessment:
 
@@ -273,26 +276,47 @@ Corrective Action:
 
 Preventive Action:
 
-คำถาม:
+ข้อมูล:
 {query_text}
 """
 
             response = model.generate_content(
                 query,
                 generation_config={
-                    "temperature": 0.2,
+                    "temperature": 0.1,
                     "max_output_tokens": max_tokens
                 }
             )
 
         try:
+
             answer = response.text[:1200]
+
+            bad_words = [
+                "ยินดีต้อนรับครับ",
+                "ยินดีต้อนรับ",
+                "สวัสดีครับ",
+                "สวัสดี",
+                "ผมคือ",
+                "ฉันคือ",
+                "ผู้ช่วย",
+                "AI Assistant",
+                "ในฐานะ",
+                "ขอเสนอ",
+                "เรียนทีมงาน"
+            ]
+
+            for word in bad_words:
+                answer = answer.replace(word, "")
+
         except Exception:
+
             answer = "ไม่สามารถสร้างคำตอบได้"
 
         print("=" * 40)
         print("QUESTION:", user_text)
-        print("ANSWER:", answer[:300])
+        print("ANSWER:")
+        print(answer)
         print("=" * 40)
 
         chunks = [
@@ -314,7 +338,7 @@ Preventive Action:
         line_bot_api.push_message(
             user_id,
             TextSendMessage(
-                text="ระบบประมวลผลขัดข้อง กรุณาลองใหม่อีกครั้ง"
+                text=f"ERROR: {str(e)}"
             )
         )
 
@@ -337,7 +361,7 @@ def handle_text(event):
 
 กำลังวิเคราะห์ข้อมูล...
 
-ตัวอย่างคำสั่ง
+ตัวอย่างคำสั่ง:
 
 5why: Burr on side top panel
 
