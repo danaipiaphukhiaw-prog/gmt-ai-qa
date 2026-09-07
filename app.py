@@ -1,52 +1,122 @@
 from flask import Flask, request
 from linebot import LineBotApi, WebhookHandler
-from linebot.models import MessageEvent, TextMessage, ImageMessage, TextSendMessage
+from linebot.models import (
+    MessageEvent,
+    TextMessage,
+    TextSendMessage
+)
 import google.generativeai as genai
 import os
 import threading
 
 app = Flask(__name__)
 
-line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
-handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+# ======================================
+# ENVIRONMENT VARIABLES
+# ======================================
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv(
+    "LINE_CHANNEL_ACCESS_TOKEN"
+)
 
+LINE_CHANNEL_SECRET = os.getenv(
+    "LINE_CHANNEL_SECRET"
+)
 
-def get_model(user_text):
-    if user_text.lower().startswith("pro:"):
-        return genai.GenerativeModel("gemini-3.5-pro"), user_text[4:].strip(), 512
-    else:
-        return genai.GenerativeModel("gemini-3.5-flash"), user_text.strip(), 256
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY"
+)
 
+# ======================================
+# LINE
+# ======================================
+
+line_bot_api = LineBotApi(
+    LINE_CHANNEL_ACCESS_TOKEN
+)
+
+handler = WebhookHandler(
+    LINE_CHANNEL_SECRET
+)
+
+# ======================================
+# GEMINI
+# ======================================
+
+genai.configure(
+    api_key=GEMINI_API_KEY
+)
+
+MODEL_PRO = "gemini-3.5-pro"
+MODEL_FLASH = "gemini-3.5-flash"
+
+# ======================================
+# HOME
+# ======================================
 
 @app.route("/")
 def home():
     return "GMT AI QA is running"
 
+# ======================================
+# WEBHOOK
+# ======================================
 
 @app.route("/callback", methods=["POST"])
 def callback():
-    signature = request.headers.get("X-Line-Signature", "")
-    body = request.get_data(as_text=True)
-    handler.handle(body, signature)
-    return "OK", 200
 
+    signature = request.headers["X-Line-Signature"]
+    body = request.get_data(as_text=True)
+
+    handler.handle(body, signature)
+
+    return "OK"
+
+# ======================================
+# MODEL SELECTOR
+# ======================================
+
+def get_model(user_text):
+
+    if user_text.lower().startswith("pro:"):
+        return (
+            genai.GenerativeModel(MODEL_PRO),
+            user_text[4:].strip(),
+            512
+        )
+
+    return (
+        genai.GenerativeModel(MODEL_FLASH),
+        user_text.strip(),
+        256
+    )
+
+# ======================================
+# GEMINI PROCESS
+# ======================================
 
 def process_text(user_id, user_text):
+
     try:
+
         lower_text = user_text.lower()
 
+        # ==================================
+        # 5 WHY
+        # ==================================
         if lower_text.startswith("5why:"):
+
             query = f"""
 คุณคือ Senior QA Engineer
 
-ทำ 5 Why Analysis ให้เป็นภาษาไทย
+ทำ 5 Why Analysis
 
 ปัญหา:
+
 {user_text[5:].strip()}
 
-รูปแบบ:
+Format:
+
 Problem:
 Why 1:
 Why 2:
@@ -58,93 +128,207 @@ Containment Action:
 Corrective Action:
 Preventive Action:
 """
-            model = genai.GenerativeModel("gemini-3.5-flash")
-            response = model.generate_content(query)
 
+            model = genai.GenerativeModel(
+                MODEL_FLASH
+            )
+
+            response = model.generate_content(
+                query,
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 512
+                }
+            )
+
+        # ==================================
+        # CAR
+        # ==================================
         elif lower_text.startswith("car:"):
+
             query = f"""
 คุณคือ QA Manager
 
-ช่วยเขียน Corrective Action Report (CAR)
+สร้าง Corrective Action Report (CAR)
 
 หัวข้อ:
+
 {user_text[4:].strip()}
 
-รูปแบบ:
-Problem Description
-Containment Action
-Root Cause
-Corrective Action
-Preventive Action
-Verification Method
-Responsible Person
-Target Date
-"""
-            model = genai.GenerativeModel("gemini-3.5-flash")
-            response = model.generate_content(query)
+Format:
 
+Problem Description:
+Containment Action:
+Root Cause:
+Corrective Action:
+Preventive Action:
+Verification Method:
+Responsible Person:
+Target Date:
+"""
+
+            model = genai.GenerativeModel(
+                MODEL_FLASH
+            )
+
+            response = model.generate_content(
+                query,
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 512
+                }
+            )
+
+        # ==================================
+        # SUPPLIER CLAIM
+        # ==================================
         elif lower_text.startswith("claim:"):
+
             query = f"""
 คุณคือ Supplier Quality Engineer
 
-ช่วยเขียน Supplier Claim ภาษาอังกฤษ
+เขียน Supplier Claim ภาษาอังกฤษ
 
 ข้อมูล:
+
 {user_text[6:].strip()}
 
-รูปแบบ:
+Format:
+
 Subject:
+
 Part Number:
 Model:
+Vendor:
 Qty:
+
 Problem:
+
 Request:
 Please investigate the root cause and provide corrective action.
 
 Best Regards
 GMT Quality Center
 """
-            model = genai.GenerativeModel("gemini-3.5-flash")
-            response = model.generate_content(query)
 
+            model = genai.GenerativeModel(
+                MODEL_FLASH
+            )
+
+            response = model.generate_content(
+                query,
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 512
+                }
+            )
+
+        # ==================================
+        # TRANSLATE
+        # ==================================
+        elif lower_text.startswith("translate:"):
+
+            query = f"""
+Translate the following text into professional QA/QC English.
+
+Text:
+
+{user_text[10:].strip()}
+"""
+
+            model = genai.GenerativeModel(
+                MODEL_FLASH
+            )
+
+            response = model.generate_content(
+                query,
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 256
+                }
+            )
+
+        # ==================================
+        # NORMAL QA
+        # ==================================
         else:
+
             model, query_text, max_tokens = get_model(user_text)
 
             query = f"""
-คุณคือ GMT QA/QC Engineer Assistant
+คุณคือ GMT Quality Center AI Assistant
+
+บทบาท:
+- Senior QA Engineer
+- Supplier Quality Engineer
+- Incoming Quality Control
+- In Process Quality Control
+- Final Quality Inspection
+- Customer Complaint Specialist
 
 ความเชี่ยวชาญ:
-- Incoming Inspection
-- In Process Quality Control
-- Final Inspection
-- Supplier Quality Management
-- Root Cause Analysis
 - Defect Analysis
+- Root Cause Analysis
 - 5 Why
-- CAR
+- Fishbone Analysis
 - Corrective Action
 - Preventive Action
+- Supplier Claim
+- CAR
+- 8D Report
+- Quality Report Writing
+- Manufacturing Process Improvement
 
-ตอบเป็นภาษาไทย
-ใช้ศัพท์ QA/QC โรงงาน
+กฎการตอบ:
 
-รูปแบบ:
-Defect:
+1. ตอบเป็นภาษาไทย
+2. ใช้ศัพท์ QA/QC และโรงงาน
+3. ไม่ตอบแบบ Chatbot ทั่วไป
+4. ตอบแบบ QA Engineer มืออาชีพ
+5. ตอบแบบเป็นหัวข้อ
+
+Format:
+
+Defect Description:
+(อธิบายปัญหา)
+
 Possible Cause:
+- Cause 1
+- Cause 2
+- Cause 3
+
+Risk Assessment:
+(ผลกระทบ)
+
 Containment Action:
+(การแก้ไขเฉพาะหน้า)
+
 Corrective Action:
+(การแก้ไขถาวร)
+
 Preventive Action:
+(การป้องกันไม่ให้เกิดซ้ำ)
 
 คำถาม:
+
 {query_text}
 """
 
             response = model.generate_content(
                 query,
-                generation_config={"max_output_tokens": max_tokens}
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": max_tokens
+                }
             )
 
-        answer = response.text if response.text else "ไม่สามารถสร้างคำตอบได้"
+        try:
+            answer = response.text
+        except Exception:
+            answer = "ไม่สามารถสร้างคำตอบได้"
+
+        print("QUESTION:", user_text)
+        print("ANSWER:", answer[:300])
 
         line_bot_api.push_message(
             user_id,
@@ -152,21 +336,43 @@ Preventive Action:
         )
 
     except Exception as e:
-        print("Gemini error:", e)
+
+        print("Gemini Error:", e)
+
         line_bot_api.push_message(
             user_id,
-            TextSendMessage(text="เกิดข้อผิดพลาดในการประมวลผล")
+            TextSendMessage(
+                text="ระบบประมวลผลขัดข้อง กรุณาลองใหม่อีกครั้ง"
+            )
         )
 
+# ======================================
+# LINE TEXT EVENT
+# ======================================
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_text(event):
+
     user_id = event.source.user_id
     user_text = event.message.text
 
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(text="โอเคครับ รอสักครู่...")
+        TextSendMessage(
+            text=
+"""🤖 GMT AI QA Assistant
+
+กำลังวิเคราะห์ข้อมูล...
+
+คำสั่งที่รองรับ
+
+5why: ปัญหา
+car: ปัญหา
+claim: รายละเอียดเคลม
+translate: ข้อความ
+
+กรุณารอสักครู่..."""
+        )
     )
 
     threading.Thread(
@@ -174,6 +380,12 @@ def handle_text(event):
         args=(user_id, user_text)
     ).start()
 
+# ======================================
+# START
+# ======================================
 
 if __name__ == "__main__":
-    app.run()
+    app.run(
+        host="0.0.0.0",
+        port=10000
+    )
