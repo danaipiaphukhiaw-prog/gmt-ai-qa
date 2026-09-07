@@ -47,6 +47,7 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
+    # Prompt สำหรับ QA Assistant
     prompt = f"""
 คุณคือ QA Assistant
 หน้าที่:
@@ -64,11 +65,13 @@ def handle_message(event):
 """
 
     try:
+        # ใช้ API ใหม่ (ไม่มี v1beta แล้ว)
         response = model.generate_content(prompt)
         reply_text = response.text if response.text else "ไม่สามารถประมวลผลคำตอบได้ในขณะนี้"
     except Exception as e:
         reply_text = f"เกิดข้อผิดพลาด: {e}"
 
+    # ส่งข้อความกลับไปที่ LINE
     try:
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
@@ -83,4 +86,3 @@ def handle_message(event):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
